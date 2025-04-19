@@ -21,11 +21,6 @@ const BOT_TOKEN = process.env.BOT_TOKEN as string;
 // Initialize Telegram Bot with polling
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// --------------------
-// Telegram Commands
-// --------------------
-
-// /start
 bot.onText(/\/start/, (msg: Message) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, `👋 Hello ${msg.from?.first_name || 'there'}! Welcome to the Bubblemaps Telegram Bot.
@@ -46,6 +41,7 @@ bot.onText(/\/help/, (msg: Message) => {
 
 🔹 Bubblemaps Commands:
 /map [chain] [token] - Get basic token info and map link
+  Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
 /score [chain] [token] - Get token decentralization score
 /screenshot [chain] [token] - Get a screenshot of the bubble map
 /holders [chain] [token] - Get top token holders
@@ -68,10 +64,10 @@ bot.onText(/\/time/, (msg: Message) => {
 });
 
 // /map [chain] [token]
-bot.onText(/\/map\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
+bot.onText(/\/map(?:\s+(\w+)\s+(0x[a-fA-F0-9]+))?/, async (msg: Message, match: RegExpExecArray | null) => {
   const chatId = msg.chat.id;
   
-  if (!match || match.length < 3) {
+  if (!match || match.length < 3 || !match[1] || !match[2]) {
     bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
     return;
   }
