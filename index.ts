@@ -176,26 +176,40 @@ bot.onText(/\/screenshot\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match
   bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
   
   try {
-    const screenshot = await generateMapScreenshot(chain, token);
-    
-    if (!screenshot) {
+    const response = await axios.post(
+      `${process.env.SCREENSHOT_SERVICE_URL}/api/screenshot`,
+      { chain, token },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        responseType: 'arraybuffer', // receive raw image data
+      }
+    );
+  
+    if (response.status !== 200 || !response.data) {
       bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
       return;
     }
-    
-    // Get token data for caption
+  
+    // Create a buffer from the response data
+    const screenshotBuffer = Buffer.from(response.data);
+  
+    // Fetch token data for caption
     const mapData = await getMapData(chain, token);
     const metadata = await getMapMetadata(chain, token);
-    
+  
     const caption = `🔵 *${mapData.full_name} (${mapData.symbol})*
-*Chain:* ${chain.toUpperCase()}
-*Decentralization Score:* ${metadata.decentralisation_score || 'N/A'}/100
-*Token Address:* \`${token}\``;
-    
-    await bot.sendPhoto(chatId, screenshot, {
-      caption: caption,
-      parse_mode: 'Markdown'
+  *Chain:* ${chain.toUpperCase()}
+  *Decentralization Score:* ${metadata.decentralisation_score || 'N/A'}/100
+  *Token Address:* \`${token}\``;
+  
+    // Send the photo using Telegram's file options
+    await bot.sendPhoto(chatId, screenshotBuffer, {
+      caption,
+      parse_mode: 'Markdown',
     });
+  
   } catch (error) {
     console.error('Error in /screenshot command:', error);
     bot.sendMessage(chatId, '❌ An error occurred while generating the screenshot. Please try again later.');

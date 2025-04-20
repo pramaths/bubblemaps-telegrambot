@@ -13,11 +13,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sparticuz/chromium": "^133.0.0",
     "axios": "^1.8.4",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "node-telegram-bot-api": "^0.66.0",
-    "puppeteer": "^24.6.1"
+    "puppeteer": "^24.6.1",
+    "puppeteer-core": "^24.6.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
