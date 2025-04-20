@@ -15,4 +15,8 @@ app.post('/', (req, res) => {
   res.status(200).send('OK');
 });
 
+app.get('/', (req, res) => {
+  res.send('🚀 Bubblemaps-telegram-bot');
+});
+
 export default app;
