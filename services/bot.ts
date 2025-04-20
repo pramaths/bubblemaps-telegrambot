@@ -1,12 +1,13 @@
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
+import { generateMapScreenshot } from './screenshotService';
 import axios from 'axios';
 
 const bot = new TelegramBot(process.env.BOT_TOKEN as string);
 
 
 export function registerCommands() {
-    
+
     bot.onText(/\/start/, (msg: Message) => {
         const chatId = msg.chat.id;
         bot.sendMessage(chatId, `👋 Hello ${msg.from?.first_name || 'there'}! Welcome to the Bubblemaps Telegram Bot.
@@ -162,25 +163,30 @@ export function registerCommands() {
         bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
 
         try {
-            const response = await axios.post(
-                `${process.env.SCREENSHOT_SERVICE_URL}/api/screenshot`,
-                { chain, token },
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    responseType: 'arraybuffer', // receive raw image data
-                }
-            );
+            // const response = await axios.post(
+            //     `${process.env.SCREENSHOT_SERVICE_URL}/api/screenshot`,
+            //     { chain, token },
+            //     {
+            //         headers: {
+            //             'Content-Type': 'application/json',
+            //         },
+            //         responseType: 'arraybuffer', // receive raw image data
+            //     }
+            // );
 
-            if (response.status !== 200 || !response.data) {
+            // if (response.status !== 200 || !response.data) {
+            //     bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
+            //     return;
+            // }
+
+            // // Create a buffer from the response data
+            // const screenshotBuffer = Buffer.from(response.data);
+
+            const screenshot = await generateMapScreenshot(chain, token);
+            if (!screenshot) {
                 bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
                 return;
             }
-
-            // Create a buffer from the response data
-            const screenshotBuffer = Buffer.from(response.data);
-
             // Fetch token data for caption
             const mapData = await getMapData(chain, token);
             const metadata = await getMapMetadata(chain, token);
@@ -191,7 +197,7 @@ export function registerCommands() {
     *Token Address:* \`${token}\``;
 
             // Send the photo using Telegram's file options
-            await bot.sendPhoto(chatId, screenshotBuffer, {
+            await bot.sendPhoto(chatId, screenshot, {
                 caption,
                 parse_mode: 'Markdown',
             });
