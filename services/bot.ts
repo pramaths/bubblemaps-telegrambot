@@ -1,10 +1,8 @@
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
 import { generateMapScreenshot } from './screenshotService';
-import axios from 'axios';
 
 const bot = new TelegramBot(process.env.BOT_TOKEN as string);
-
 
 export function registerCommands() {
 
@@ -18,6 +16,8 @@ export function registerCommands() {
     // /help
     bot.onText(/\/help/, (msg: Message) => {
         const chatId = msg.chat.id;
+        console.log(`[LOG] Help command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+        console.log(`[LOG] Chat ID: ${chatId}`);
         bot.sendMessage(chatId, `Here are the available commands:
 
     🔹 Basic Commands:
@@ -53,14 +53,17 @@ export function registerCommands() {
     // /map [chain] [token]
     bot.onText(/\/map(?:\s+(\w+)\s+(0x[a-fA-F0-9]+))?/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
+        console.log(`[LOG] Map command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
 
         if (!match || match.length < 3 || !match[1] || !match[2]) {
+            console.log(`[LOG] Invalid map command parameters`);
             bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
             return;
         }
 
         const chain = match[1].toLowerCase();
         const token = match[2];
+        console.log(`[LOG] Fetching map for chain: ${chain}, token: ${token}`);
 
         bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
 
@@ -107,7 +110,7 @@ export function registerCommands() {
             bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /score bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
             return;
         }
-
+        
         const chain = match[1].toLowerCase();
         const token = match[2];
 
@@ -151,14 +154,17 @@ export function registerCommands() {
     // /screenshot [chain] [token]
     bot.onText(/\/screenshot\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
+        console.log(`[LOG] Screenshot command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
 
         if (!match || match.length < 3) {
+            console.log(`[LOG] Invalid screenshot command parameters`);
             bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /screenshot bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
             return;
         }
 
         const chain = match[1].toLowerCase();
         const token = match[2];
+        console.log(`[LOG] Generating screenshot for chain: ${chain}, token: ${token}`);
 
         bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
 
