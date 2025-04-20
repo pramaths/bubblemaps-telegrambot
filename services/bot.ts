@@ -66,58 +66,22 @@ export function registerCommands() {
         const token = match[2];
         console.log(`[LOG] Fetching map for chain: ${chain}, token: ${token}`);
 
-        // Send initial loading message and store the message object
-        const loadingMessage = await bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
-        
-        // Start loading animation
-        const loadingAnimationFrames = ['⏳', '⌛️', '⏳', '⌛️'];
-        let frameIndex = 0;
-        const loadingInterval = setInterval(async () => {
-            try {
-                await bot.editMessageText(
-                    `🔍 Fetching map data for ${token} on ${chain}... ${loadingAnimationFrames[frameIndex]}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
-                frameIndex = (frameIndex + 1) % loadingAnimationFrames.length;
-            } catch (error) {
-                // Ignore errors during animation (e.g., if the message was already deleted)
-                console.log("Animation update error:", error);
-            }
-        }, 800);
+        bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
 
         try {
             // Check map availability
             const availability = await getMapAvailability(chain, token);
 
             if (availability.status !== 'OK' || !availability.availability) {
-                clearInterval(loadingInterval);
-                bot.editMessageText(
-                    `❌ Map not available for this token. ${availability.message || ''}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
+                bot.sendMessage(chatId, `❌ Map not available for this token. ${availability.message || ''}`);
                 return;
             }
 
             // Get map data
             const mapData = await getMapData(chain, token);
 
-            // Clear the loading animation
-            clearInterval(loadingInterval);
-
             if ('message' in mapData && mapData.message) {
-                bot.editMessageText(
-                    `❌ Error: ${mapData.message}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
+                bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
                 return;
             }
 
@@ -132,22 +96,10 @@ export function registerCommands() {
     *View the interactive bubble map:*
     ${mapUrl}`;
 
-            bot.editMessageText(message, { 
-                chat_id: chatId,
-                message_id: loadingMessage.message_id,
-                parse_mode: 'Markdown' 
-            });
+            bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
         } catch (error) {
-            // Clear the loading animation
-            clearInterval(loadingInterval);
             console.error('Error in /map command:', error);
-            bot.editMessageText(
-                '❌ An error occurred while fetching the map data. Please try again later.',
-                {
-                    chat_id: chatId,
-                    message_id: loadingMessage.message_id
-                }
-            );
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the map data. Please try again later.');
         }
     });
 
@@ -163,48 +115,18 @@ export function registerCommands() {
         const chain = match[1].toLowerCase();
         const token = match[2];
 
-        // Send initial loading message and store the message object
-        const loadingMessage = await bot.sendMessage(chatId, `🔍 Fetching decentralization score for ${token} on ${chain}...`);
-        
-        // Start loading animation with different emoji set
-        const loadingAnimationFrames = ['🔍', '🔎', '🔍', '🔎'];
-        let frameIndex = 0;
-        const loadingInterval = setInterval(async () => {
-            try {
-                await bot.editMessageText(
-                    `Analyzing token ${token} on ${chain}... ${loadingAnimationFrames[frameIndex]}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
-                frameIndex = (frameIndex + 1) % loadingAnimationFrames.length;
-            } catch (error) {
-                // Ignore errors during animation
-                console.log("Animation update error:", error);
-            }
-        }, 800);
+        bot.sendMessage(chatId, `🔍 Fetching decentralization score for ${token} on ${chain}...`);
 
         try {
             const metadata = await getMapMetadata(chain, token);
 
             if (metadata.status !== 'OK') {
-                clearInterval(loadingInterval);
-                bot.editMessageText(
-                    `❌ Error: ${metadata.message || 'Failed to fetch metadata'}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
+                bot.sendMessage(chatId, `❌ Error: ${metadata.message || 'Failed to fetch metadata'}`);
                 return;
             }
 
             // Get token data for additional info
             const mapData = await getMapData(chain, token);
-
-            // Clear the loading animation
-            clearInterval(loadingInterval);
 
             let scoreEmoji = '🟢';
             if (metadata.decentralisation_score && metadata.decentralisation_score < 50) {
@@ -223,22 +145,10 @@ export function registerCommands() {
     *Token Address:* \`${token}\`
     *Chain:* ${chain.toUpperCase()}`;
 
-            bot.editMessageText(message, { 
-                chat_id: chatId,
-                message_id: loadingMessage.message_id,
-                parse_mode: 'Markdown' 
-            });
+            bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
         } catch (error) {
-            // Clear the loading animation
-            clearInterval(loadingInterval);
             console.error('Error in /score command:', error);
-            bot.editMessageText(
-                '❌ An error occurred while fetching the score data. Please try again later.',
-                {
-                    chat_id: chatId,
-                    message_id: loadingMessage.message_id
-                }
-            );
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the score data. Please try again later.');
         }
     });
 
@@ -257,27 +167,7 @@ export function registerCommands() {
         const token = match[2];
         console.log(`[LOG] Generating screenshot for chain: ${chain}, token: ${token}`);
 
-        // Send initial loading message and store the message object
-        const loadingMessage = await bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
-        
-        // Start loading animation with camera emoji
-        const loadingAnimationFrames = ['📷', '📸', '📷', '📸'];
-        let frameIndex = 0;
-        const loadingInterval = setInterval(async () => {
-            try {
-                await bot.editMessageText(
-                    `Generating screenshot for ${token} on ${chain}... ${loadingAnimationFrames[frameIndex]}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
-                frameIndex = (frameIndex + 1) % loadingAnimationFrames.length;
-            } catch (error) {
-                // Ignore errors during animation
-                console.log("Animation update error:", error);
-            }
-        }, 800);
+        bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
 
         try {
             const response = await axios.post(
@@ -290,12 +180,6 @@ export function registerCommands() {
                     responseType: 'arraybuffer', // receive raw image data
                 }
             );
-
-            // Clear the loading animation
-            clearInterval(loadingInterval);
-            
-            // Delete the loading message since we'll send a new photo
-            await bot.deleteMessage(chatId, loadingMessage.message_id);
 
             if (response.status !== 200 || !response.data) {
                 bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
@@ -321,16 +205,8 @@ export function registerCommands() {
             });
 
         } catch (error) {
-            // Clear the loading animation
-            clearInterval(loadingInterval);
             console.error('Error in /screenshot command:', error);
-            bot.editMessageText(
-                '❌ An error occurred while generating the screenshot. Please try again later.',
-                {
-                    chat_id: chatId,
-                    message_id: loadingMessage.message_id
-                }
-            );
+            bot.sendMessage(chatId, '❌ An error occurred while generating the screenshot. Please try again later.');
         }
     });
 
@@ -346,42 +222,13 @@ export function registerCommands() {
         const chain = match[1].toLowerCase();
         const token = match[2];
 
-        // Send initial loading message and store the message object
-        const loadingMessage = await bot.sendMessage(chatId, `🔍 Fetching top holders for ${token} on ${chain}...`);
-        
-        // Start loading animation
-        const loadingAnimationFrames = ['👥', '👤', '👥', '👤'];
-        let frameIndex = 0;
-        const loadingInterval = setInterval(async () => {
-            try {
-                await bot.editMessageText(
-                    `Analyzing holders for ${token} on ${chain}... ${loadingAnimationFrames[frameIndex]}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
-                frameIndex = (frameIndex + 1) % loadingAnimationFrames.length;
-            } catch (error) {
-                // Ignore errors during animation
-                console.log("Animation update error:", error);
-            }
-        }, 800);
+        bot.sendMessage(chatId, `🔍 Fetching top holders for ${token} on ${chain}...`);
 
         try {
             const mapData = await getMapData(chain, token);
 
-            // Clear the loading animation
-            clearInterval(loadingInterval);
-
             if ('message' in mapData && mapData.message) {
-                bot.editMessageText(
-                    `❌ Error: ${mapData.message}`,
-                    {
-                        chat_id: chatId,
-                        message_id: loadingMessage.message_id
-                    }
-                );
+                bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
                 return;
             }
 
@@ -400,22 +247,10 @@ export function registerCommands() {
 
             holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
 
-            bot.editMessageText(holdersText, { 
-                chat_id: chatId,
-                message_id: loadingMessage.message_id,
-                parse_mode: 'Markdown' 
-            });
+            bot.sendMessage(chatId, holdersText, { parse_mode: 'Markdown' });
         } catch (error) {
-            // Clear the loading animation
-            clearInterval(loadingInterval);
             console.error('Error in /holders command:', error);
-            bot.editMessageText(
-                '❌ An error occurred while fetching the holders data. Please try again later.',
-                {
-                    chat_id: chatId,
-                    message_id: loadingMessage.message_id
-                }
-            );
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the holders data. Please try again later.');
         }
     });
 
