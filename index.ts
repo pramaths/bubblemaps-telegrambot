@@ -11,8 +11,14 @@ const PORT = process.env.PORT || 3000;
 registerCommands();
 
 app.post('/', (req, res) => {
-  bot.processUpdate(req.body);
-  res.status(200).send('OK');
+  console.log("Received update:", req.body);
+  try{
+    bot.processUpdate(req.body);
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error("Error processing update:", error);
+    res.status(500).send('Error');
+  }
 });
 
 app.get('/', (_req, res) => {
