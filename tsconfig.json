@@ -1,14 +1,19 @@
 {
   "compilerOptions": {
     "target": "es2016",
-    "module": "commonjs",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
     "outDir": "./dist",
     "rootDir": "./",
     "resolveJsonModule": true
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   },
   "include": [
     "**/*.ts"
@@ -17,3 +22,4 @@
     "node_modules"
   ]
 }
+
