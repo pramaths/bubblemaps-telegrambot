@@ -1,7 +1,15 @@
-import puppeteer from 'puppeteer';
+import chromium from 'chrome-aws-lambda';
+import puppeteer from 'puppeteer-core';
 import { getMapIframeUrl, getMapAvailability } from './bubblemapsService';
 
-export const generateMapScreenshot = async (chain: string, token: string): Promise<Buffer | null> => {
+export async function generateMapScreenshot(chain: string, token: string): Promise<Buffer | null> {
+  const browser = await chromium.puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath,
+    headless: chromium.headless,
+  });
+  
   try {
     // First check if the map is available
     const availability = await getMapAvailability(chain, token);
@@ -11,11 +19,6 @@ export const generateMapScreenshot = async (chain: string, token: string): Promi
     }
 
     const url = getMapIframeUrl(chain, token);
-    const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      headless: true
-    });
-    
     const page = await browser.newPage();
     await page.setViewport({ width: 1200, height: 800 });
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
@@ -24,11 +27,9 @@ export const generateMapScreenshot = async (chain: string, token: string): Promi
     await new Promise(resolve => setTimeout(resolve, 5000));
     
     const screenshot = await page.screenshot({ type: 'png' }) as Buffer;
-    await browser.close();
     
     return screenshot;
-  } catch (error) {
-    console.error('Error generating screenshot:', error);
-    return null;
+  } finally {
+    await browser.close();
   }
-}; 
+} 
