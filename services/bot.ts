@@ -2,7 +2,7 @@ import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
 import { generateMapScreenshot } from './screenshotService';
 
-const bot = new TelegramBot(process.env.BOT_TOKEN as string);
+const bot = new TelegramBot('7813758462:AAF5QGMLpjfYof2B8xfIYOgsYtEy2k8W53s', { polling: false });
 
 export function registerCommands() {
 
