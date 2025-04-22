@@ -1,11 +1,12 @@
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
 import { generateMapScreenshot } from './screenshotService';
+import { analyzeToken } from './geminiService';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const bot = new TelegramBot(process.env.BOT_TOKEN as string, { polling: true });
+const bot = new TelegramBot(process.env.BOT_TOKEN as string, { polling: false });
 
 export function registerCommands() {
 
@@ -28,13 +29,11 @@ export function registerCommands() {
 /time - <i>Show current time</i>
 
 <b>🔹 Bubblemaps Commands:</b>
-/map [chain] [token] - <i>Get basic token info and map link</i>
-/score [chain] [token] - <i>Get token decentralization score</i>
+/analytics [chain] [token] - <i>Get basic token info,decentralisation score,top holders info and map link</i>
 /screenshot [chain] [token] - <i>Get a screenshot of the bubble map</i>
-/holders [chain] [token] - <i>Get top token holders</i>
 
 <b>Example command:</b>
-/map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
+/analytics bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
 
 Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`, { parse_mode: 'HTML' });
     });
@@ -53,22 +52,24 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
         bot.sendMessage(chatId, `⏰ Current time: ${now}`);
     });
 
-    // /map [chain] [token]
-    bot.onText(/\/map(?:\s+(\w+)\s+(0x[a-fA-F0-9]+))?/, async (msg: Message, match: RegExpExecArray | null) => {
+    bot.onText(/\/analytics\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
-        console.log(`[LOG] Map command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+        const username = msg.from?.username || 'unknown';
+        const userId = msg.from?.id;
 
-        if (!match || match.length < 3 || !match[1] || !match[2]) {
-            console.log(`[LOG] Invalid map command parameters`);
+        console.log(`[LOG] /map command by user ${userId} (${username})`);
+
+        if (!match || match.length < 3) {
+            console.log(`[LOG] Invalid /map command parameters`);
             bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
             return;
         }
 
         const chain = match[1].toLowerCase();
         const token = match[2];
-        console.log(`[LOG] Fetching map for chain: ${chain}, token: ${token}`);
+        console.log(`[LOG] Fetching data for chain: ${chain}, token: ${token}`);
 
-        bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
+        bot.sendMessage(chatId, `🔍 Fetching data for ${token} on ${chain}...`);
 
         try {
             // Check map availability
@@ -81,76 +82,72 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
 
             // Get map data
             const mapData = await getMapData(chain, token);
-
             if ('message' in mapData && mapData.message) {
                 bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
                 return;
             }
 
-            const mapUrl = getMapIframeUrl(chain, token);
-
-            const message = `🔵 *${mapData.full_name} (${mapData.symbol})*
-
-    *Token Address:* \`${token}\`
-    *Chain:* ${chain.toUpperCase()}
-    *Last Updated:* ${new Date(mapData.dt_update).toLocaleString()}
-
-    *View the interactive bubble map:*
-    ${mapUrl}`;
-
-            bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error in /map command:', error);
-            bot.sendMessage(chatId, '❌ An error occurred while fetching the map data. Please try again later.');
-        }
-    });
-
-    // /score [chain] [token]
-    bot.onText(/\/score\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
-        const chatId = msg.chat.id;
-
-        if (!match || match.length < 3) {
-            bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /score bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
-            return;
-        }
-        
-        const chain = match[1].toLowerCase();
-        const token = match[2];
-
-        bot.sendMessage(chatId, `🔍 Fetching decentralization score for ${token} on ${chain}...`);
-
-        try {
+            // Get score metadata
             const metadata = await getMapMetadata(chain, token);
-
             if (metadata.status !== 'OK') {
                 bot.sendMessage(chatId, `❌ Error: ${metadata.message || 'Failed to fetch metadata'}`);
                 return;
             }
 
-            // Get token data for additional info
-            const mapData = await getMapData(chain, token);
+            // Get top 5 holders
+            const topHolders = mapData.nodes.slice(0, 5);
 
+            // let holdersText = `👥 *Top Holders of ${mapData.full_name} (${mapData.symbol})*\n\n`;
+            let holdersText = `👥 *Top Holders*\n\n`;
+
+            topHolders.forEach((holder: MapNode, index: number) => {
+                const name = holder.name || holder.address;
+                holdersText += `${index + 1}. ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}\n`;
+                holdersText += `   *Percentage:* ${holder.percentage.toFixed(2)}%\n`;
+                holdersText += `   *Amount:* ${holder.amount.toLocaleString()}\n`;
+                holdersText += `   *Type:* ${holder.is_contract ? 'Contract' : 'Wallet'}\n\n`;
+            });
+
+            holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
+
+            // Score emoji logic
             let scoreEmoji = '🟢';
-            if (metadata.decentralisation_score && metadata.decentralisation_score < 50) {
+            const score = metadata.decentralisation_score || 0;
+            if (score < 50) {
                 scoreEmoji = '🔴';
-            } else if (metadata.decentralisation_score && metadata.decentralisation_score < 70) {
+            } else if (score < 70) {
                 scoreEmoji = '🟠';
             }
 
-            const message = `${scoreEmoji} *Decentralization Score for ${mapData.full_name} (${mapData.symbol})*
+            const mapUrl = getMapIframeUrl(chain, token);
+            const message = `🔵 *${mapData.full_name} (${mapData.symbol})*
 
-    *Score:* ${metadata.decentralisation_score || 'N/A'}/100
-    *Supply in CEXs:* ${metadata.identified_supply?.percent_in_cexs || 'N/A'}%
-    *Supply in Contracts:* ${metadata.identified_supply?.percent_in_contracts || 'N/A'}%
-    *Last Updated:* ${new Date(metadata.dt_update || '').toLocaleString()}
+*Token Address:* \`${token}\`
+*Chain:* \`${chain.toUpperCase()}\`
+*Last Updated:* \`${new Date(mapData.dt_update).toLocaleString()}\`
 
-    *Token Address:* \`${token}\`
-    *Chain:* ${chain.toUpperCase()}`;
+🌐 *Interactive Map:*
+${mapUrl}
+
+${scoreEmoji} *Decentralization Score:* \`${score}/100\`
+- *Supply in CEXs:* \`${metadata.identified_supply?.percent_in_cexs || 'N/A'}%\`
+- *Supply in Contracts:* \`${metadata.identified_supply?.percent_in_contracts || 'N/A'}%\`
+
+${holdersText}`;
+            
+            const response = await analyzeToken(token, topHolders.map(holder => ({
+                address: holder.address,
+                balance: holder.amount.toString(),
+                percentage: holder.percentage.toFixed(2)
+            })));
+            const AImessage = `*AI Analysis 🤖 -*\n\n${response}`;
 
             bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            bot.sendMessage(chatId, AImessage, { parse_mode: 'Markdown' });
+
         } catch (error) {
-            console.error('Error in /score command:', error);
-            bot.sendMessage(chatId, '❌ An error occurred while fetching the score data. Please try again later.');
+            console.error('Error in merged /map command:', error);
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the data. Please try again later.');
         }
     });
 
@@ -217,50 +214,6 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
         }
     });
 
-    // /holders [chain] [token]
-    bot.onText(/\/holders\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
-        const chatId = msg.chat.id;
-
-        if (!match || match.length < 3) {
-            bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /holders bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
-            return;
-        }
-
-        const chain = match[1].toLowerCase();
-        const token = match[2];
-
-        bot.sendMessage(chatId, `🔍 Fetching top holders for ${token} on ${chain}...`);
-
-        try {
-            const mapData = await getMapData(chain, token);
-
-            if ('message' in mapData && mapData.message) {
-                bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
-                return;
-            }
-
-            // Get top 10 holders
-            const topHolders = mapData.nodes.slice(0, 10);
-
-            let holdersText = `👥 *Top Holders of ${mapData.full_name} (${mapData.symbol})*\n\n`;
-
-            topHolders.forEach((holder: MapNode, index: number) => {
-                const name = holder.name || holder.address;
-                holdersText += `${index + 1}. ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}\n`;
-                holdersText += `   *Percentage:* ${holder.percentage.toFixed(2)}%\n`;
-                holdersText += `   *Amount:* ${holder.amount.toLocaleString()}\n`;
-                holdersText += `   *Type:* ${holder.is_contract ? 'Contract' : 'Wallet'}\n\n`;
-            });
-
-            holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
-
-            bot.sendMessage(chatId, holdersText, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error in /holders command:', error);
-            bot.sendMessage(chatId, '❌ An error occurred while fetching the holders data. Please try again later.');
-        }
-    });
-
     // Fallback for non-command text messages
     bot.on('message', (msg: Message) => {
         const chatId = msg.chat.id;
@@ -269,6 +222,157 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
             bot.sendMessage(chatId, `🤖 I received: "${msg.text}". Type /help for options.`);
         }
     });
+
+
+    // // /map [chain] [token]
+    // bot.onText(/\/map(?:\s+(\w+)\s+(0x[a-fA-F0-9]+))?/, async (msg: Message, match: RegExpExecArray | null) => {
+    //     const chatId = msg.chat.id;
+    //     console.log(`[LOG] Map command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+
+    //     if (!match || match.length < 3 || !match[1] || !match[2]) {
+    //         console.log(`[LOG] Invalid map command parameters`);
+    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
+    //         return;
+    //     }
+
+    //     const chain = match[1].toLowerCase();
+    //     const token = match[2];
+    //     console.log(`[LOG] Fetching map for chain: ${chain}, token: ${token}`);
+
+    //     bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
+
+    //     try {
+    //         // Check map availability
+    //         const availability = await getMapAvailability(chain, token);
+
+    //         if (availability.status !== 'OK' || !availability.availability) {
+    //             bot.sendMessage(chatId, `❌ Map not available for this token. ${availability.message || ''}`);
+    //             return;
+    //         }
+
+    //         // Get map data
+    //         const mapData = await getMapData(chain, token);
+
+    //         if ('message' in mapData && mapData.message) {
+    //             bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
+    //             return;
+    //         }
+
+    //         const mapUrl = getMapIframeUrl(chain, token);
+
+    //         const message = `🔵 *${mapData.full_name} (${mapData.symbol})*
+
+    // *Token Address:* \`${token}\`
+    // *Chain:* ${chain.toUpperCase()}
+    // *Last Updated:* ${new Date(mapData.dt_update).toLocaleString()}
+
+    // *View the interactive bubble map:*
+    // ${mapUrl}`;
+
+    //         bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    //     } catch (error) {
+    //         console.error('Error in /map command:', error);
+    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the map data. Please try again later.');
+    //     }
+    // });
+
+    // // /score [chain] [token]
+    // bot.onText(/\/score\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
+    //     const chatId = msg.chat.id;
+
+    //     if (!match || match.length < 3) {
+    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /score bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
+    //         return;
+    //     }
+        
+    //     const chain = match[1].toLowerCase();
+    //     const token = match[2];
+
+    //     bot.sendMessage(chatId, `🔍 Fetching decentralization score for ${token} on ${chain}...`);
+
+    //     try {
+    //         const metadata = await getMapMetadata(chain, token);
+
+    //         if (metadata.status !== 'OK') {
+    //             bot.sendMessage(chatId, `❌ Error: ${metadata.message || 'Failed to fetch metadata'}`);
+    //             return;
+    //         }
+
+    //         // Get token data for additional info
+    //         const mapData = await getMapData(chain, token);
+
+    //         let scoreEmoji = '🟢';
+    //         if (metadata.decentralisation_score && metadata.decentralisation_score < 50) {
+    //             scoreEmoji = '🔴';
+    //         } else if (metadata.decentralisation_score && metadata.decentralisation_score < 70) {
+    //             scoreEmoji = '🟠';
+    //         }
+
+    //         const message = `${scoreEmoji} *Decentralization Score for ${mapData.full_name} (${mapData.symbol})*
+
+    // *Score:* ${metadata.decentralisation_score || 'N/A'}/100
+    // *Supply in CEXs:* ${metadata.identified_supply?.percent_in_cexs || 'N/A'}%
+    // *Supply in Contracts:* ${metadata.identified_supply?.percent_in_contracts || 'N/A'}%
+    // *Last Updated:* ${new Date(metadata.dt_update || '').toLocaleString()}
+
+    // *Token Address:* \`${token}\`
+    // *Chain:* ${chain.toUpperCase()}`;
+
+    //         bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    //     } catch (error) {
+    //         console.error('Error in /score command:', error);
+    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the score data. Please try again later.');
+    //     }
+    // });
+
+    // /map [chain] [token]
+
+
+    // - *Score Last Updated:* ${new Date(metadata.dt_update || '').toLocaleString()}
+
+     // // /holders [chain] [token]
+    // bot.onText(/\/holders\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
+    //     const chatId = msg.chat.id;
+
+    //     if (!match || match.length < 3) {
+    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /holders bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
+    //         return;
+    //     }
+
+    //     const chain = match[1].toLowerCase();
+    //     const token = match[2];
+
+    //     bot.sendMessage(chatId, `🔍 Fetching top holders for ${token} on ${chain}...`);
+
+    //     try {
+    //         const mapData = await getMapData(chain, token);
+
+    //         if ('message' in mapData && mapData.message) {
+    //             bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
+    //             return;
+    //         }
+
+    //         // Get top 10 holders
+    //         const topHolders = mapData.nodes.slice(0, 10);
+
+    //         let holdersText = `👥 *Top Holders of ${mapData.full_name} (${mapData.symbol})*\n\n`;
+
+    //         topHolders.forEach((holder: MapNode, index: number) => {
+    //             const name = holder.name || holder.address;
+    //             holdersText += `${index + 1}. ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}\n`;
+    //             holdersText += `   *Percentage:* ${holder.percentage.toFixed(2)}%\n`;
+    //             holdersText += `   *Amount:* ${holder.amount.toLocaleString()}\n`;
+    //             holdersText += `   *Type:* ${holder.is_contract ? 'Contract' : 'Wallet'}\n\n`;
+    //         });
+
+    //         holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
+
+    //         bot.sendMessage(chatId, holdersText, { parse_mode: 'Markdown' });
+    //     } catch (error) {
+    //         console.error('Error in /holders command:', error);
+    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the holders data. Please try again later.');
+    //     }
+    // });
 
 }
 

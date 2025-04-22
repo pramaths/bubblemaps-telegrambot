@@ -20,8 +20,13 @@ export const generateMapScreenshot = async (chain: string, token: string): Promi
     await page.setViewport({ width: 1200, height: 800 });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     
-    // Wait for the map to fully render
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait for a specific HTML element to be present in the DOM
+    await Promise.all([
+        page.waitForSelector('#circles', {timeout: 60000 }),
+        // page.waitForSelector('.scanner-icon', {timeout: 60000 }),
+        // page.waitForSelector('.material-icons', {timeout: 60000 }),
+    ]); 
+   
     
     const screenshot = await page.screenshot({ type: 'png' }) as Buffer;
     await browser.close();
@@ -32,3 +37,4 @@ export const generateMapScreenshot = async (chain: string, token: string): Promi
     return null;
   }
 }; 
+
