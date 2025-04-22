@@ -1,16 +1,17 @@
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
 import { generateMapScreenshot } from './screenshotService';
+import dotenv from 'dotenv';
 
-const bot = new TelegramBot('7813758462:AAF5QGMLpjfYof2B8xfIYOgsYtEy2k8W53s', { polling: false });
+dotenv.config();
+
+const bot = new TelegramBot(process.env.BOT_TOKEN as string, { polling: true });
 
 export function registerCommands() {
 
     bot.onText(/\/start/, (msg: Message) => {
         const chatId = msg.chat.id;
-        bot.sendMessage(chatId, `👋 Hello ${msg.from?.first_name || 'there'}! Welcome to the Bubblemaps Telegram Bot.
-    
-    Type /help to see available commands.`);
+        bot.sendMessage(chatId, `👋 Hello ${msg.from?.first_name || 'there'}! Welcome to the Bubblemaps Telegram Bot 🤖.\n\nType /help to see available commands.`);
     });
 
     // /help
@@ -20,20 +21,22 @@ export function registerCommands() {
         console.log(`[LOG] Chat ID: ${chatId}`);
         bot.sendMessage(chatId, `Here are the available commands:
 
-    🔹 Basic Commands:
-    /start - Welcome message
-    /help - Show this help message
-    /echo [text] - Echo back your text
-    /time - Show current time
+<b>🔹 Basic Commands:</b>
+/start - <i>Welcome message</i>
+/help - <i>Show this help message</i>
+/echo [text] - <i>Echo back your text</i>
+/time - <i>Show current time</i>
 
-    🔹 Bubblemaps Commands:
-    /map [chain] [token] - Get basic token info and map link
-    Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
-    /score [chain] [token] - Get token decentralization score
-    /screenshot [chain] [token] - Get a screenshot of the bubble map
-    /holders [chain] [token] - Get top token holders
+<b>🔹 Bubblemaps Commands:</b>
+/map [chain] [token] - <i>Get basic token info and map link</i>
+/score [chain] [token] - <i>Get token decentralization score</i>
+/screenshot [chain] [token] - <i>Get a screenshot of the bubble map</i>
+/holders [chain] [token] - <i>Get top token holders</i>
 
-    Available chains: eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic`);
+<b>Example command:</b>
+/map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
+
+Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`, { parse_mode: 'HTML' });
     });
 
     // /echo
