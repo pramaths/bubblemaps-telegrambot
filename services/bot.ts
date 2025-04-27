@@ -1,8 +1,13 @@
+import axios from 'axios';
+import dotenv from 'dotenv';
+import fs from 'fs';
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { getMapAvailability, getMapData, getMapIframeUrl, getMapMetadata, MapNode } from './bubblemapsService';
 import { generateMapScreenshot } from './screenshotService';
-import { analyzeToken } from './geminiService';
-import dotenv from 'dotenv';
+import { analyzeToken,analyzeTokenPriceVolume } from './geminiService';
+import { sendLargeMessage } from '../utils/sendLargeMessage';
+import { generatePieChart } from '../utils/pieChart';
+import { generateLineChart } from '../utils/lineChart';
 
 dotenv.config();
 
@@ -22,51 +27,121 @@ export function registerCommands() {
         console.log(`[LOG] Chat ID: ${chatId}`);
         bot.sendMessage(chatId, `Here are the available commands:
 
-<b>🔹 Basic Commands:</b>
-/start - <i>Welcome message</i>
-/help - <i>Show this help message</i>
-/echo [text] - <i>Echo back your text</i>
-/time - <i>Show current time</i>
+🔹 **Basic Commands:**
+\`/start\` - Welcome message
+\`/help\` - Show this help message
 
-<b>🔹 Bubblemaps Commands:</b>
-/analytics [chain] [token] - <i>Get basic token info,decentralisation score,top holders info and map link</i>
-/screenshot [chain] [token] - <i>Get a screenshot of the bubble map</i>
+🔹 **Advanced Commands:**
+\`/tokendetail <token address>\` - Get token details
+\`/analytics <chain> <token address>\` - Get basic token info, decentralisation score, top holders info and map link
+\`/get2wpricechart <token address>\` - Get 2-week price and volume chart
+\`/tokenbalances <wallet address>\` - Get token balances for a wallet address
+\`/walletpnl <wallet address>\` - Get comprehensive PnL analysis for a wallet address
 
-<b>Example command:</b>
-/analytics bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95
+**Example command:**
+\`/analytics bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95\`
 
-Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`, { parse_mode: 'HTML' });
+Available chains: _eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic_`, { parse_mode: 'Markdown' });
     });
 
-    // /echo
-    bot.onText(/\/echo (.+)/, (msg: Message, match: RegExpExecArray | null) => {
+    // // /echo
+    // bot.onText(/\/echo (.+)/, (msg: Message, match: RegExpExecArray | null) => {
+    //     const chatId = msg.chat.id;
+    //     const resp = match?.[1];
+    //     bot.sendMessage(chatId, resp || 'Nothing to echo!');
+    // });
+
+    // // /time
+    // bot.onText(/\/time/, (msg: Message) => {
+    //     const chatId = msg.chat.id;
+    //     const now = new Date().toLocaleString();
+    //     bot.sendMessage(chatId, `⏰ Current time: ${now}`);
+    // });
+
+    // /tokendetail <token address>
+    bot.onText(/\/tokendetail(?:\s+(\S+))?/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
-        const resp = match?.[1];
-        bot.sendMessage(chatId, resp || 'Nothing to echo!');
+        console.log(`[LOG] tokendetail command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+
+        if (!match || !match[1]) {
+            console.log(`[LOG] Invalid tokendetail command parameters`);
+            bot.sendMessage(chatId, 'Please provide a valid token address.\nExample: `/tokendetail y1k9ZRqLwKLbyUe5LfQf53jYXeSyvrFi7URt4FWpump`',{parse_mode: 'Markdown'});
+            return;
+        }
+
+        const tokenAddress = match[1];
+        console.log(`[LOG] Fetching token details for address: ${tokenAddress}`);
+
+        bot.sendMessage(chatId, `🔍 Fetching details for token address: ${tokenAddress}.\nPlease wait...`);
+
+        try {
+            const response = await axios.get(`https://api.vybenetwork.xyz/token/${tokenAddress}`, {
+                headers: {
+                    'X-API-KEY': process.env.API_TOKEN as string,
+                },
+            });
+
+            if (response.status !== 200 || !response.data) {
+                bot.sendMessage(chatId, '❌ Failed to fetch token details. Please try again later.');
+                return;
+            }
+
+            const tokenData = response.data;
+
+            if (!tokenData || tokenData.error) {
+                bot.sendMessage(chatId, `❌ Error: ${tokenData.error || 'Failed to fetch token details'}`);
+                return;
+            }
+
+            const message = `🔵 *Token Details:*
+
+*Name:* ${tokenData.name || 'N/A'}
+*Symbol:* ${tokenData.symbol || 'N/A'}
+*Price:* ${tokenData.price ? '$' + tokenData.price.toFixed(12) : 'N/A'} 
+*Current Supply:* ${formatValue(tokenData.currentSupply)}
+*Market Cap:* $${formatValue(tokenData.marketCap)}
+*24h Volume Transfer:* $${formatValue(tokenData.usdValueVolume24h)}
+*Price1d ago:* ${tokenData.price1d ? '$' + tokenData.price1d.toFixed(12) : 'N/A'}
+*Price7d ago:* ${tokenData.price7d ? '$' + tokenData.price7d.toFixed(12) : 'N/A'}
+*category:* ${tokenData.category || 'N/A'}
+*Token Address:* \`${tokenAddress}\`
+
+*Additional Info:*
+- *Verified:* ${tokenData.verified ? '✅ Yes' : '❌ No'}
+- *Last Updated:* ${tokenData.updateTime ? new Date(tokenData.updateTime * 1000).toLocaleString() : 'N/A'}`;
+
+            if (tokenData.logoUrl) {
+                await bot.sendPhoto(chatId, tokenData.logoUrl, {
+                    caption: message,
+                    parse_mode: 'Markdown',
+                });
+            } else {
+                bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            }
+            
+        } catch (error) {
+            console.error('Error in /tokendetail command:', error);
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the token details. Please try again later.');
+        }
     });
 
-    // /time
-    bot.onText(/\/time/, (msg: Message) => {
-        const chatId = msg.chat.id;
-        const now = new Date().toLocaleString();
-        bot.sendMessage(chatId, `⏰ Current time: ${now}`);
-    });
-
-    bot.onText(/\/analytics\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
+    // /analytics <chain> <token address>
+    bot.onText(/\/analytics(?:\s+(\w+))?(?:\s+(\S+))?/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
         const username = msg.from?.username || 'unknown';
         const userId = msg.from?.id;
 
-        console.log(`[LOG] /map command by user ${userId} (${username})`);
+        console.log(`[LOG] /analytics command by user ${userId} (${username})`);
 
-        if (!match || match.length < 3) {
-            console.log(`[LOG] Invalid /map command parameters`);
-            bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
+        if (!match || !match[1] || !match[2]) {
+            console.log(`[LOG] Invalid /analytics command parameters`);
+            bot.sendMessage(chatId, 'Please provide both chain and token address. Example: `/analytics bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95`',{parse_mode:'Markdown'});
             return;
         }
 
         const chain = match[1].toLowerCase();
         const token = match[2];
+        console.log("chain",chain,"token",token);
         console.log(`[LOG] Fetching data for chain: ${chain}, token: ${token}`);
 
         bot.sendMessage(chatId, `🔍 Fetching data for ${token} on ${chain}...`);
@@ -97,17 +172,13 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
             // Get top 5 holders
             const topHolders = mapData.nodes.slice(0, 5);
 
-            // let holdersText = `👥 *Top Holders of ${mapData.full_name} (${mapData.symbol})*\n\n`;
             let holdersText = `👥 *Top Holders*\n\n`;
-
             topHolders.forEach((holder: MapNode, index: number) => {
-                const name = holder.name || holder.address;
-                holdersText += `${index + 1}. ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}\n`;
+                holdersText += `${index + 1}. \`${holder.address}\`\n`;
                 holdersText += `   *Percentage:* ${holder.percentage.toFixed(2)}%\n`;
-                holdersText += `   *Amount:* ${holder.amount.toLocaleString()}\n`;
+                holdersText += `   *Amount:* ${formatValue(holder.amount)}\n`;
                 holdersText += `   *Type:* ${holder.is_contract ? 'Contract' : 'Wallet'}\n\n`;
             });
-
             holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
 
             // Score emoji logic
@@ -120,260 +191,309 @@ Available chains: <i>eth, bsc, ftm, avax, cro, arbi, poly, base, sol, sonic</i>`
             }
 
             const mapUrl = getMapIframeUrl(chain, token);
-            const message = `🔵 *${mapData.full_name} (${mapData.symbol})*
+            const message = `🔵 *${mapData.full_name} (${mapData.symbol})*\n\n*Token Address:* \`${token}\`\n*Chain:* \`${chain.toUpperCase()}\`\n*Last Updated:* \`${new Date(mapData.dt_update).toLocaleString()}\`\n\n${scoreEmoji} *Decentralization Score:* \`${score}/100\`\n- *Supply in CEXs:* \`${metadata.identified_supply?.percent_in_cexs}%\`\n- *Supply in Contracts:* \`${metadata.identified_supply?.percent_in_contracts}%\`\n\n${holdersText}`;
 
-*Token Address:* \`${token}\`
-*Chain:* \`${chain.toUpperCase()}\`
-*Last Updated:* \`${new Date(mapData.dt_update).toLocaleString()}\`
-
-🌐 *Interactive Map:*
-${mapUrl}
-
-${scoreEmoji} *Decentralization Score:* \`${score}/100\`
-- *Supply in CEXs:* \`${metadata.identified_supply?.percent_in_cexs || 'N/A'}%\`
-- *Supply in Contracts:* \`${metadata.identified_supply?.percent_in_contracts || 'N/A'}%\`
-
-${holdersText}`;
-            
             const response = await analyzeToken(token, topHolders.map(holder => ({
                 address: holder.address,
                 balance: holder.amount.toString(),
                 percentage: holder.percentage.toFixed(2)
             })));
-            const AImessage = `*AI Analysis 🤖 -*\n\n${response}`;
+            const AImessage = `*Gemini AI Verdict:*\n${response}`;
 
-            bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-            bot.sendMessage(chatId, AImessage, { parse_mode: 'Markdown' });
+            // Try to generate and send screenshot first
+            let screenshotSent = false;
+            try {
+                const screenshot = await generateMapScreenshot(chain, token);
+                if (screenshot) {
+                    const caption = `Bubblemaps screenshot ${mapData.full_name} (${mapData.symbol})`;
+                    await bot.sendPhoto(chatId, screenshot, {
+                        caption,
+                        parse_mode: 'Markdown',
+                    });
+                    screenshotSent = true;
+                }
+            } catch (err) {
+                console.error('Screenshot generation failed:', err);
+                // Continue gracefully
+            }
+
+            // Send analytics text
+            await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, AImessage, { parse_mode: 'Markdown' });
+            // Always send map link at end
+            await bot.sendMessage(chatId, `For detailed and interactive visualization, [click here](${mapUrl}) to view the bubblemaps live on browser`, { parse_mode: 'Markdown' });
 
         } catch (error) {
-            console.error('Error in merged /map command:', error);
+            console.error('Error in /analytics command:', error);
             bot.sendMessage(chatId, '❌ An error occurred while fetching the data. Please try again later.');
         }
     });
 
-    // /screenshot [chain] [token]
-    bot.onText(/\/screenshot\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
+    // /get2wpricechart <token address>
+    bot.onText(/\/get2wpricechart(?:\s+(\S+))?/, async (msg: Message, match: RegExpExecArray | null) => {
         const chatId = msg.chat.id;
-        console.log(`[LOG] Screenshot command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
-
-        if (!match || match.length < 3) {
-            console.log(`[LOG] Invalid screenshot command parameters`);
-            bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /screenshot bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
+        console.log(`[LOG] Price chart command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+        
+        if (!match || !match[1]) {
+            console.log(`[LOG] Invalid get2wpricechart command parameters`);
+            bot.sendMessage(chatId, 'Please provide a valid token address.\nExample: `/get2wpricechart y1k9ZRqLwKLbyUe5LfQf53jYXeSyvrFi7URt4FWpump`',{parse_mode: 'Markdown'});
             return;
         }
 
-        const chain = match[1].toLowerCase();
-        const token = match[2];
-        console.log(`[LOG] Generating screenshot for chain: ${chain}, token: ${token}`);
+        const tokenAddress = match[1];
+        console.log(`[LOG] Fetching price data for token address: ${tokenAddress}`);
 
-        bot.sendMessage(chatId, `📸 Generating screenshot for ${token} on ${chain}. This may take a moment...`);
+        bot.sendMessage(chatId, `🔍 Generating 7-day price chart for token: ${tokenAddress}. Please wait...`);
 
         try {
-            // const response = await axios.post(
-            //     `${process.env.SCREENSHOT_SERVICE_URL}/api/screenshot`,
-            //     { chain, token },
-            //     {
-            //         headers: {
-            //             'Content-Type': 'application/json',
-            //         },
-            //         responseType: 'arraybuffer', // receive raw image data
-            //     }
-            // );
-
-            // if (response.status !== 200 || !response.data) {
-            //     bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
-            //     return;
-            // }
-
-            // // Create a buffer from the response data
-            // const screenshotBuffer = Buffer.from(response.data);
-
-            const screenshot = await generateMapScreenshot(chain, token);
-            if (!screenshot) {
-                bot.sendMessage(chatId, '❌ Failed to generate screenshot. The map might not be available.');
-                return;
-            }
-            // Fetch token data for caption
-            const mapData = await getMapData(chain, token);
-            const metadata = await getMapMetadata(chain, token);
-
-            const caption = `🔵 *${mapData.full_name} (${mapData.symbol})*
-    *Chain:* ${chain.toUpperCase()}
-    *Decentralization Score:* ${metadata.decentralisation_score || 'N/A'}/100
-    *Token Address:* \`${token}\``;
-
-            // Send the photo using Telegram's file options
-            await bot.sendPhoto(chatId, screenshot, {
-                caption,
-                parse_mode: 'Markdown',
+            const response = await axios.get(`https://api.vybenetwork.xyz/price/${tokenAddress}/token-ohlcv`, {
+                headers: {
+                    'X-API-KEY': process.env.API_TOKEN as string,
+                },
+                params: {
+                    resolution: '1d'
+                }
             });
 
+            if (response.status !== 200 || !response.data || !response.data.data) {
+                bot.sendMessage(chatId, '❌ Failed to fetch token price data. Please try again later.');
+                return;
+            }
+
+            const data = response.data.data;
+            const labels = data.map((item: any) => new Date(item.time * 1000).toLocaleDateString());
+            const prices = data.map((item: any) => parseFloat(item.close));
+            const volumes = data.map((item: any) => parseFloat(item.volumeUsd));
+
+            // Calculate price change percentage
+            const firstPrice = prices[0];
+            const lastPrice = prices[prices.length - 1];
+            const priceChange = ((lastPrice - firstPrice) / firstPrice) * 100;
+            const priceChangeEmoji = priceChange >= 0 ? '📈' : '📉';
+
+            // Calculate volume change percentage
+            const firstVolume = volumes[0];
+            const lastVolume = volumes[volumes.length - 1];
+            const volumeChange = ((lastVolume - firstVolume) / firstVolume) * 100;
+            const volumeChangeEmoji = volumeChange >= 0 ? '📈' : '📉';
+
+            const chartBuffer = await generateLineChart(
+                labels,
+                prices,
+                volumes,
+                `2-Week Price & Volume Chart for ${tokenAddress.slice(0, 8)}...`
+            );
+
+            await bot.sendPhoto(chatId, chartBuffer);
+
+            // Prepare price/volume history for Gemini
+            const priceVolumeHistory = data.map((item: any) => ({
+                time: item.time,
+                close: parseFloat(item.close),
+                volumeUsd: parseFloat(item.volumeUsd)
+            }));
+            // Call Gemini for verdict
+            let aiVerdict: string;
+            try {
+                aiVerdict = await analyzeTokenPriceVolume(tokenAddress, priceVolumeHistory);
+            } catch (err) {
+                aiVerdict = 'Could not get Gemini verdict due to an error.';
+            }
+            // Show more decimals if both changes are very small
+            let priceChangeStr = priceChange.toFixed(2);
+            let volumeChangeStr = volumeChange.toFixed(2);
+            if (Math.abs(priceChange) < 0.01 && Math.abs(volumeChange) < 0.01) {
+                priceChangeStr = priceChange.toFixed(8);
+                volumeChangeStr = volumeChange.toFixed(8);
+            }
+            const verdict = `${priceChangeEmoji} Price Change (2w): ${priceChangeStr}%\n${volumeChangeEmoji} Volume Change (2w): ${volumeChangeStr}%\n\nGemini AI Verdict:\n${aiVerdict}`;
+            bot.sendMessage(chatId, verdict);
+
         } catch (error) {
-            console.error('Error in /screenshot command:', error);
-            bot.sendMessage(chatId, '❌ An error occurred while generating the screenshot. Please try again later.');
+            console.error('Error generating price chart:', error);
+            bot.sendMessage(chatId, '❌ Error generating price chart. Please try again later.');
         }
     });
 
-    // Fallback for non-command text messages
+    // /tokenbalances <wallet address>
+    bot.onText(/\/tokenbalances(?:\s+(\S+))?/, async (msg: Message, match: RegExpExecArray | null) => {
+        const chatId = msg.chat.id;
+        console.log(`[LOG] tokenbalances command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+
+        if (!match || !match[1]) {
+            console.log(`[LOG] Invalid tokenbalances command parameters`);
+            bot.sendMessage(chatId, 'Please provide a valid wallet address.\nExample: `/tokenbalances EBwMpd2zHKJuG3qxqBgLgNYpjS9DJLtPpG2CytcJqhJL`',{parse_mode:'Markdown'});
+            return;
+        }
+
+        const walletAddress = match[1];
+        console.log(`[LOG] Fetching token balances for wallet address: ${walletAddress}`);
+
+        bot.sendMessage(chatId, `🔍 Fetching token balances for wallet address: ${walletAddress}.\nPlease wait...`);
+
+        try {
+            const response = await axios.get(`https://api.vybenetwork.xyz/account/token-balance/${walletAddress}`, {
+                headers: {
+                    'X-API-KEY': process.env.API_TOKEN as string,
+                },
+            });
+
+            if (response.status !== 200 || !response.data) {
+                bot.sendMessage(chatId, '❌ Failed to fetch token balances. Please try again later.');
+                return;
+            }
+
+            const balanceData = response.data;
+
+            if (!balanceData || balanceData.error) {
+                bot.sendMessage(chatId, `❌ Error: ${balanceData.error || 'Failed to fetch token balances'}`);
+                return;
+            }
+
+            balanceData.data.sort((a: any, b: any) => Number(b.valueUsd) - Number(a.valueUsd));
+
+
+            const maxTokensToShow = 20;
+            const totalTokens = balanceData.data.length;
+            const tokensToShow = balanceData.data.slice(0, maxTokensToShow);
+
+            let message = `🔵 *Token Balances for Wallet:* \`${walletAddress}\`\n\n`;
+            message += `*Total Token Value (USD):* $${balanceData.totalTokenValueUsd}\n`;
+            message += `*1-Day Change:* ${balanceData.totalTokenValueUsd1dChange}%\n`;
+            message += `*Total Tokens:* ${balanceData.totalTokenCount}\n\n`;
+
+            tokensToShow.forEach((token: any) => {
+                message += `🔹 *${token.name} (${token.symbol})*\n`;
+                message += `   *% of Total Holdings:* ${(token.valueUsd / balanceData.totalTokenValueUsd * 100).toFixed(2)}%\n`;
+                message += `   *Amount:* ${token.amount}\n`;
+                message += `   *Value (USD):* $${token.valueUsd}\n`;
+                message += `   *Price (USD):* $${token.priceUsd}\n`;
+                message += `   *1-Day Price Change:* ${token.priceUsd1dChange}%\n`;
+                message += `   *Category:* ${token.category}\n`;
+                message += `   *Verified:* ${token.verified ? '✅ Yes' : '❌ No'}\n\n`;
+            });
+
+            if (totalTokens > maxTokensToShow) {
+                const remaining = totalTokens - maxTokensToShow;
+                message += `➕ *And ${remaining} more tokens...*\n\n`;
+            }
+
+            // 🔥 Send smartly in chunks
+            await sendLargeMessage(bot, chatId, message, { parse_mode: 'Markdown' });
+
+            // Generate and send pie chart
+            const pieChartPath = await generatePieChart(tokensToShow);
+            await bot.sendPhoto(chatId, pieChartPath, { caption: '📊 Token Distribution' });
+
+            // Optional: clean up after sending
+            fs.unlinkSync(pieChartPath);
+
+        } catch (error) {
+            console.error('Error in /tokenbalances command:', error);
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the token balances. Please try again later.');
+        }
+    });
+
+    // /walletpnl <wallet address>
+    bot.onText(/\/walletpnl(?:\s+(\S+))?/, async (msg: Message, match: RegExpExecArray | null) => {
+        const chatId = msg.chat.id;
+        console.log(`[LOG] Wallet PnL command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
+
+        if (!match || !match[1]) {
+            console.log(`[LOG] Invalid walletpnl command parameters`);
+            bot.sendMessage(chatId, 'Please provide a valid wallet address.\nExample: `/walletpnl EBwMpd2zHKJuG3qxqBgLgNYpjS9DJLtPpG2CytcJqhJL`',{parse_mode: 'Markdown'});
+            return;
+        }
+
+        const walletAddress = match[1];
+        console.log(`[LOG] Fetching PnL data for wallet address: ${walletAddress}`);
+
+        bot.sendMessage(chatId, `🔍 Fetching comprehensive PnL analysis for wallet address: ${walletAddress}. Please wait...`);
+
+        try {
+            const response = await axios.get(`https://api.vybenetwork.xyz/account/pnl/${walletAddress}`, {
+                headers: {
+                    'X-API-KEY': process.env.API_TOKEN as string,
+                },
+            });
+
+            if (response.status !== 200 || !response.data) {
+                bot.sendMessage(chatId, '❌ Failed to fetch wallet PnL data. Please try again later.');
+                return;
+            }
+
+            const pnlData = response.data;
+
+            if (!pnlData || pnlData.error) {
+                bot.sendMessage(chatId, `❌ Error: ${pnlData.error || 'Failed to fetch wallet PnL data'}`);
+                return;
+            }
+
+            const summary = pnlData.summary;
+            const tokenMetrics = pnlData.tokenMetrics;
+
+            let message = `🔵 *Wallet PnL Analysis for:* \`${walletAddress}\`\n\n`;
+
+            message += `*Summary:*\n`;
+            message += `- *Win Rate:* ${summary.winRate ? (summary.winRate * 100).toFixed(2) + '%' : 'N/A'}\n`;
+            message += `- *Realized PnL (USD):* $${summary.realizedPnlUsd.toFixed(2)}\n`;
+            message += `- *Unrealized PnL (USD):* $${summary.unrealizedPnlUsd.toFixed(2)}\n`;
+            message += `- *Unique Tokens Traded:* ${summary.uniqueTokensTraded}\n`;
+            message += `- *Average Trade (USD):* $${summary.averageTradeUsd.toFixed(2)}\n`;
+            message += `- *Total Trades:* ${summary.tradesCount}\n`;
+            message += `- *Winning Trades:* ${summary.winningTradesCount}\n`;
+            message += `- *Losing Trades:* ${summary.losingTradesCount}\n`;
+            message += `- *Trades Volume (USD):* $${summary.tradesVolumeUsd.toFixed(2)}\n`;
+            message += `- *Best Performing Token:* ${summary.bestPerformingToken || 'N/A'}\n`;
+            message += `- *Worst Performing Token:* ${summary.worstPerformingToken || 'N/A'}\n\n`;
+
+            if (summary.pnlTrendSevenDays.length > 0) {
+                message += `*PnL Trend (Last 7 Days):*\n`;
+                summary.pnlTrendSevenDays.forEach((trend: any, index: number) => {
+                    message += `   Day ${index + 1}: $${trend.toFixed(2)}\n`;
+                });
+                message += `\n`;
+            }
+
+            if (tokenMetrics.length > 0) {
+                message += `*Token Metrics:*\n`;
+                tokenMetrics.forEach((token: any) => {
+                    message += `🔹 *${token.name} (${token.symbol})*\n`;
+                    message += `   - *Realized PnL (USD):* $${token.realizedPnlUsd.toFixed(2)}\n`;
+                    message += `   - *Unrealized PnL (USD):* $${token.unrealizedPnlUsd.toFixed(2)}\n`;
+                    message += `   - *Trades Count:* ${token.tradesCount}\n`;
+                    message += `   - *Volume (USD):* $${token.volumeUsd.toFixed(2)}\n\n`;
+                });
+            }
+
+            bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+
+        } catch (error) {
+            console.error('Error in /walletpnl command:', error);
+            bot.sendMessage(chatId, '❌ An error occurred while fetching the wallet PnL data. Please try again later.');
+        }
+    });
+
+    // Fallback for non-commands & text messages
     bot.on('message', (msg: Message) => {
         const chatId = msg.chat.id;
 
-        if (!msg.text?.startsWith('/')) {
-            bot.sendMessage(chatId, `🤖 I received: "${msg.text}". Type /help for options.`);
+        // Check if the message starts with '/' and no command matched
+        if (msg.text?.startsWith('/') && !msg.text.match(/^\/(start|help|echo|time|walletpnl|tokenbalances|analytics|get2wpricechart)/)) {
+            bot.sendMessage(chatId, `⚠️ Unknown command: "${msg.text}". Type /help to see available commands.`);
+        } else if (!msg.text?.startsWith('/')) {
+            bot.sendMessage(chatId, `🤖 I received your message: "${msg.text}".\nSince I work only on configured commands, type /help to see available commands.`);
         }
     });
 
-
-    // // /map [chain] [token]
-    // bot.onText(/\/map(?:\s+(\w+)\s+(0x[a-fA-F0-9]+))?/, async (msg: Message, match: RegExpExecArray | null) => {
-    //     const chatId = msg.chat.id;
-    //     console.log(`[LOG] Map command requested by user ${msg.from?.id} (${msg.from?.username || 'unknown'})`);
-
-    //     if (!match || match.length < 3 || !match[1] || !match[2]) {
-    //         console.log(`[LOG] Invalid map command parameters`);
-    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /map bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
-    //         return;
-    //     }
-
-    //     const chain = match[1].toLowerCase();
-    //     const token = match[2];
-    //     console.log(`[LOG] Fetching map for chain: ${chain}, token: ${token}`);
-
-    //     bot.sendMessage(chatId, `🔍 Fetching map data for ${token} on ${chain}...`);
-
-    //     try {
-    //         // Check map availability
-    //         const availability = await getMapAvailability(chain, token);
-
-    //         if (availability.status !== 'OK' || !availability.availability) {
-    //             bot.sendMessage(chatId, `❌ Map not available for this token. ${availability.message || ''}`);
-    //             return;
-    //         }
-
-    //         // Get map data
-    //         const mapData = await getMapData(chain, token);
-
-    //         if ('message' in mapData && mapData.message) {
-    //             bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
-    //             return;
-    //         }
-
-    //         const mapUrl = getMapIframeUrl(chain, token);
-
-    //         const message = `🔵 *${mapData.full_name} (${mapData.symbol})*
-
-    // *Token Address:* \`${token}\`
-    // *Chain:* ${chain.toUpperCase()}
-    // *Last Updated:* ${new Date(mapData.dt_update).toLocaleString()}
-
-    // *View the interactive bubble map:*
-    // ${mapUrl}`;
-
-    //         bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    //     } catch (error) {
-    //         console.error('Error in /map command:', error);
-    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the map data. Please try again later.');
-    //     }
-    // });
-
-    // // /score [chain] [token]
-    // bot.onText(/\/score\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
-    //     const chatId = msg.chat.id;
-
-    //     if (!match || match.length < 3) {
-    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /score bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
-    //         return;
-    //     }
-        
-    //     const chain = match[1].toLowerCase();
-    //     const token = match[2];
-
-    //     bot.sendMessage(chatId, `🔍 Fetching decentralization score for ${token} on ${chain}...`);
-
-    //     try {
-    //         const metadata = await getMapMetadata(chain, token);
-
-    //         if (metadata.status !== 'OK') {
-    //             bot.sendMessage(chatId, `❌ Error: ${metadata.message || 'Failed to fetch metadata'}`);
-    //             return;
-    //         }
-
-    //         // Get token data for additional info
-    //         const mapData = await getMapData(chain, token);
-
-    //         let scoreEmoji = '🟢';
-    //         if (metadata.decentralisation_score && metadata.decentralisation_score < 50) {
-    //             scoreEmoji = '🔴';
-    //         } else if (metadata.decentralisation_score && metadata.decentralisation_score < 70) {
-    //             scoreEmoji = '🟠';
-    //         }
-
-    //         const message = `${scoreEmoji} *Decentralization Score for ${mapData.full_name} (${mapData.symbol})*
-
-    // *Score:* ${metadata.decentralisation_score || 'N/A'}/100
-    // *Supply in CEXs:* ${metadata.identified_supply?.percent_in_cexs || 'N/A'}%
-    // *Supply in Contracts:* ${metadata.identified_supply?.percent_in_contracts || 'N/A'}%
-    // *Last Updated:* ${new Date(metadata.dt_update || '').toLocaleString()}
-
-    // *Token Address:* \`${token}\`
-    // *Chain:* ${chain.toUpperCase()}`;
-
-    //         bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    //     } catch (error) {
-    //         console.error('Error in /score command:', error);
-    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the score data. Please try again later.');
-    //     }
-    // });
-
-    // /map [chain] [token]
-
-
-    // - *Score Last Updated:* ${new Date(metadata.dt_update || '').toLocaleString()}
-
-     // // /holders [chain] [token]
-    // bot.onText(/\/holders\s+(\w+)\s+(0x[a-fA-F0-9]+)/, async (msg: Message, match: RegExpExecArray | null) => {
-    //     const chatId = msg.chat.id;
-
-    //     if (!match || match.length < 3) {
-    //         bot.sendMessage(chatId, 'Please provide both chain and token address. Example: /holders bsc 0x603c7f932ed1fc6575303d8fb018fdcbb0f39a95');
-    //         return;
-    //     }
-
-    //     const chain = match[1].toLowerCase();
-    //     const token = match[2];
-
-    //     bot.sendMessage(chatId, `🔍 Fetching top holders for ${token} on ${chain}...`);
-
-    //     try {
-    //         const mapData = await getMapData(chain, token);
-
-    //         if ('message' in mapData && mapData.message) {
-    //             bot.sendMessage(chatId, `❌ Error: ${mapData.message}`);
-    //             return;
-    //         }
-
-    //         // Get top 10 holders
-    //         const topHolders = mapData.nodes.slice(0, 10);
-
-    //         let holdersText = `👥 *Top Holders of ${mapData.full_name} (${mapData.symbol})*\n\n`;
-
-    //         topHolders.forEach((holder: MapNode, index: number) => {
-    //             const name = holder.name || holder.address;
-    //             holdersText += `${index + 1}. ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}\n`;
-    //             holdersText += `   *Percentage:* ${holder.percentage.toFixed(2)}%\n`;
-    //             holdersText += `   *Amount:* ${holder.amount.toLocaleString()}\n`;
-    //             holdersText += `   *Type:* ${holder.is_contract ? 'Contract' : 'Wallet'}\n\n`;
-    //         });
-
-    //         holdersText += `\n*Total Holders Analyzed:* ${mapData.nodes.length}`;
-
-    //         bot.sendMessage(chatId, holdersText, { parse_mode: 'Markdown' });
-    //     } catch (error) {
-    //         console.error('Error in /holders command:', error);
-    //         bot.sendMessage(chatId, '❌ An error occurred while fetching the holders data. Please try again later.');
-    //     }
-    // });
-
 }
+
+const formatValue = (value: number | undefined): string => {
+    if (value === undefined || value === null) return 'N/A';
+    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
+    return `${Number(value).toFixed(2)}`;
+};
 
 export default bot;

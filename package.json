@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node index.ts",
+    "dev": "nodemon index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "echo \"No tests specified\" && exit 0"
@@ -15,7 +15,9 @@
   "dependencies": {
     "@google/genai": "^0.9.0",
     "axios": "^1.8.4",
-    "bubble-telegram": "file:",
+    "chart.js": "^4.4.9",
+    "chartjs-node-canvas": "^5.0.0",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "mime": "^4.0.7",
