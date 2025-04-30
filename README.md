@@ -26,17 +26,28 @@ A Telegram bot that brings **on-chain analytics** to your fingertips. Simply sen
 
 ```bash
 /start
-  Initiates interaction with the bot
+  Welcome message
 
 /help
-  Shows available commands
+  Show this help message
 
-/analytics [chain] [address]
-  Get basic token info, decentralization score, top holders info, and a Bubblemaps link
+/tokendetail <token address>
+  Get token details
 
-/screenshot [chain] [address]
-  Get a screenshot of the token's bubblemap
+/analytics <chain> <token address>
+  Get basic token info, decentralisation score, top holders info and map link
+
+/get2wpricechart <token address>
+  Get 2-week price and volume chart
+
+/tokenbalances <wallet address>
+  Get token balances for a wallet address
+
+/walletpnl <wallet address>
+  Get comprehensive PnL analysis for a wallet address
+
 ```
+
 
 ## 🚀 Getting Started
 
@@ -66,12 +77,16 @@ npm run start
 
 ## 📸 Screenshots
 
-Sneak peek of the bot in action — coming soon!
+Below are example outputs for each supported command:
 
-| Command | Output |
-|---------|--------|
-| `/analytics` | ![Analytics Screenshot](/api/placeholder/400/250) |
-| `/screenshot` | ![Bubblemap Screenshot](/api/placeholder/400/250) |
+| Command         | Output(s)                                                                                                 |
+|-----------------|----------------------------------------------------------------------------------------------------------|
+| `/tokenbalances`| ![1](screenshots/tokenbalances/1.png)                                                                    |
+| `/analytics`    | ![1](screenshots/analytics/1.png) ![2](screenshots/analytics/2.png)                                      |
+| `/walletpnl`    | ![1](screenshots/walletpnl/1.png) ![2](screenshots/walletpnl/2.png)                                      |
+| `/tokendetail`  | ![1](screenshots/tokendetail/1.png) ![2](screenshots/tokendetail/2.png)                                  |
+| `/get2wpricechart`| ![1](screenshots/get2w/1.png) |
+
 
 ## 🤝 Contributing
 
@@ -83,8 +98,8 @@ We welcome PRs and contributions! Just follow these general rules:
 
 <!-- ## 📄 License
 
-MIT © Your Name
+MIT © Your Name -->
 
-## 🌐 Live Bot
+##🌐 Live Bot
 
-🟢 Bot is live! Find it on Telegram at @Bubblemaps_orbot  -->
+🟢 Bot is live! Find it on Telegram at @Bubblemaps_orbot
