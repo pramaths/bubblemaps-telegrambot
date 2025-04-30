@@ -100,6 +100,6 @@ We welcome PRs and contributions! Just follow these general rules:
 
 MIT © Your Name -->
 
-##🌐 Live Bot
+## 🌐 Live Bot
 
 🟢 Bot is live! Find it on Telegram at @Bubblemaps_orbot
