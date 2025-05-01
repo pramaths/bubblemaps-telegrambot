@@ -2,6 +2,9 @@
 
 A Telegram bot that brings **on-chain analytics** to your fingertips. Simply send a token's contract address along with the chain, and the bot delivers **visualizations** and **metrics** straight to your chat — powered by [Bubblemaps](https://www.bubblemaps.io).
 
+[![Watch the demo](https://img.shields.io/badge/Watch-Demo-blue?logo=google-drive)](https://drive.google.com/file/d/17p3Iqh_f14psYVsyS_JPD1jl_FmmCfh_/view)
+
+
 ## ✨ Features
 
 - 📍 **Bubble Map Screenshot** — Instantly generates a map of token holder clusters.
@@ -100,6 +103,6 @@ We welcome PRs and contributions! Just follow these general rules:
 
 MIT © Your Name -->
 
-##🌐 Live Bot
+## 🌐 Live Bot
 
 🟢 Bot is live! Find it on Telegram at @Bubblemaps_orbot
